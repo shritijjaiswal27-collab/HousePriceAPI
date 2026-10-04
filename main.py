@@ -3,13 +3,13 @@ import joblib
 import pandas as pd
 from fastapi import FastAPI,HTTPException,UploadFile,File
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel,Field
+from pydantic import BaseModel,Field             #Pydantic is used for data validation.
 
 app=FastAPI()
 model=joblib.load(("house_model.joblib"))
 features=joblib.load("housea_features.joblib")
 
-class HouseFeatures(BaseModel):
+class HouseFeatures(BaseModel): #Pydantic checks whether the incoming data follows the expected structure.
     MedInc: float=Field(gt=0,description="Media Income of" \
     "Neighborhood")
     HouseAge: float=Field(gt=0, description="Average age of the house in the block")
@@ -18,7 +18,7 @@ class HouseFeatures(BaseModel):
     Population: float=Field(gt=0, description="Population of the block")
     AveOccup: float=Field(gt=0, description="Average number of occupants in the house")
     Latitude: float=Field(gt=0, description="Latitude of the block")
-    Longitude: float=Field(gt=0, description="Longitude of the block")
+    Longitude: float=Field(gt=0, description="Longitude of the block") #gt:greater than, lt:less than, ge:greater than or equal to, le:less than or equal to, ne:not equal to, eq:equal to
 
 @app.get("/")
 def home():
@@ -39,7 +39,7 @@ def health():
     }
 
 @app.post("/predict")
-def predict(house: HouseFeatures):
+def predict(house: HouseFeatures): #here,house contains the user's input.
     try:
         input_data=pd.DataFrame([{
             "MedInc":house.MedInc,
@@ -56,9 +56,9 @@ def predict(house: HouseFeatures):
         price_usd=predicted_price*100000
         
         return{
-            "predicted_price":f"${price_usd:,.0f}",
+            "predicted_price":f"${price_usd:,.0f}", #:,0f formats the number with commas as thousands separators and no decimal places.
             "predicted_price_short":f"${predicted_price:,.2f} hundred thousands",
-            "fidence_range":f"${price_usd-39000:,.0f} to ${price_usd+39000:,.0f}"
+            "confidence_range":f"${price_usd-39000:,.0f} to ${price_usd+39000:,.0f}"
         
         }
     except Exception as e:
@@ -66,15 +66,15 @@ def predict(house: HouseFeatures):
 
 
 @app.post("/predict_file")
-async def predict_file(file: UploadFile = File(...)):
+async def predict_file(file: UploadFile = File(...)): #This endpoint expects a file upload.
 
 
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload a CSV file.")
 
-    contents=await file.read()
+    contents=await file.read() #async means the function can perform asynchronous operations
 
-    df = pd.read_csv(io.BytesIO(contents))
+    df = pd.read_csv(io.BytesIO(contents)) #This converts the uploaded bytes into an in-memory file-like object.
 
     required_columns=[
         "MedInc",
@@ -87,7 +87,7 @@ async def predict_file(file: UploadFile = File(...)):
         "Longitude"
     ]
 
-    missing_columns=[col for col in required_columns if col not in df.columns]
+    missing_columns=[col for col in required_columns if col not in df.columns] #Go through every required column and collect the ones that don't exist in the uploaded CSV.
     if missing_columns:
         raise HTTPException(status_code=400, detail=f"Missing required columns: {', '.join(missing_columns)}")
 
@@ -98,10 +98,15 @@ async def predict_file(file: UploadFile = File(...)):
         predictions=model.predict(df[required_columns])
         df["PredictedPrice"]=[f"${pred*100000:,.0f}" for pred in predictions]
 
-        output=io.StringIO()
+        output=io.StringIO() #This creates an in-memory text file.
         df.to_csv(output,index=False)
         output.seek(0)
 
         return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition":"attachment; filename=predictions.csv"})
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error occurred while making predictions: {str(e)}")
+
+
+#StreamingResponse:This sends the generated CSV back to the user as a downloadable file.
+
+#The API supports both individual house predictions through JSON and batch predictions through CSV file uploads."
